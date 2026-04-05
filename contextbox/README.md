@@ -92,6 +92,74 @@ cargo run --release -- cli config mcp
 | POST | `/api/search` | Semantic search |
 | POST | `/api/chat` | RAG chat |
 
+## CLI Reference
+
+All commands use the `cb` binary.
+
+### Key management
+
+```bash
+cb keygen          # generate encryption key (run once on first install)
+cb key show        # print the key contents
+cb key path        # print the key file path
+```
+
+### Local document operations
+
+```bash
+cb add --file doc.md               # add a file
+cb add --file doc.md --name "My Doc"  # add with custom name
+cb add --content "raw text here"   # add inline text
+
+cb list                            # list all documents
+cb get <id>                        # show document content (decrypted)
+cb delete <id>                     # delete a document
+cb search "query"                  # keyword search across documents
+```
+
+### Remote document operations
+
+Interact with a ContextBox server running on another machine (or via Cloudflare Tunnel):
+
+```bash
+cb remote add \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY \
+  --file doc.md
+
+cb remote add \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY \
+  --content "raw text"
+
+cb remote list \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY
+
+cb remote search \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY \
+  "search query"
+```
+
+### Config and info
+
+```bash
+cb config mcp      # print MCP server config (paste into Claude Desktop / Cursor)
+cb config cli      # print CLI config (data dir, key path, env vars)
+cb setup           # quick setup check (key + database)
+```
+
+### Global flags
+
+```bash
+cb --data-dir /path/to/data <command>   # override data directory
+cb --api-key KEY remote list ...        # pass API key inline
+cb --url http://host:8080 remote list   # pass server URL inline
+```
+
+---
+
 ## Setup
 
 ### Automated Setup (Linux)
