@@ -7,40 +7,28 @@ authors = ["ContextBox Team"]
 description = "Self-hosted Document AI Platform - Like Context7 but self-hosted"
 
 [dependencies]
-axum = "0.7"
-tower = { version = "0.4", features = ["macros"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+axum = { version = "0.7", features = ["multipart"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tinyvector = "0.1"
-model-context-protocol = "0.1"
 modelcontextprotocol-server = "0.1"
 clap = { version = "4", features = ["derive"] }
-reqwest = { version = "0.12", features = ["json"] }
-futures = "0.3"
-multipart = "0.2"
-tracing = "0.1"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenv = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "1"
-async-trait = "0.1"
 base64 = "0.22"
 dirs = "5"
 
 # Encryption
-age = "0.9"
 age-core = "0.9"
 rand = "0.8"
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
-
-[dependencies.kreuzberg]
-version = "0.1"
-features = ["sync"]
 
 [dev-dependencies]
 tokio-test = "0.4"
