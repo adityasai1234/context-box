@@ -46,7 +46,7 @@ features = ["sync"]
 tokio-test = "0.4"
 
 [[bin]]
-name = "contextbox"
+name = "context-box"
 path = "src/main.rs"
 
 [[bin]]
