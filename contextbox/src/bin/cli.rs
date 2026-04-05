@@ -2,6 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 use serde_json::json;
 use std::fs;
+use contextbox::storage::{DocumentStore, StoredDocument, create_document};
 
 #[derive(Parser)]
 #[command(name = "contextbox")]
@@ -76,6 +77,10 @@ fn ensure_data_dir(data_dir: &PathBuf) -> std::io::Result<()> {
     Ok(())
 }
 
+fn get_store_path(data_dir: &PathBuf) -> PathBuf {
+    data_dir.join("documents.json")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -87,6 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     ensure_data_dir(&data_dir)?;
+    let store_path = get_store_path(&data_dir);
     
     match cli.command {
         Commands::Serve { port, host } => {
@@ -95,8 +101,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Access via: http://{}:{}", host, port);
         }
         Commands::Add { file, name, content } => {
-            println!("Adding document...");
-            
             let doc_content = if let Some(f) = file {
                 match fs::read_to_string(&f) {
                     Ok(text) => text,
@@ -112,26 +116,89 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             };
             
-            let doc_name = name.unwrap_or_else(|| "Untitled".to_string());
+            let doc_name = name.unwrap_or_else(|| {
+                file.as_ref()
+                    .and_then(|f| f.file_name())
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Untitled")
+                    .to_string()
+            });
+            
+            let mut store = DocumentStore::new(&store_path);
+            let doc = create_document(doc_name.clone(), doc_content.clone(), "cli");
+            let id = store.add(doc);
+            
+            if let Err(e) = store.save(&store_path) {
+                eprintln!("Error saving document: {}", e);
+                return Ok(());
+            }
             
             println!("Document '{}' added", doc_name);
+            println!("  ID: {}", id);
             println!("  Content length: {} chars", doc_content.len());
-            println!("  Data directory: {:?}", data_dir);
+            println!("  Saved to: {:?}", store_path);
         }
         Commands::List => {
-            println!("Documents in {:?}:", data_dir.join("documents"));
-            println!("(No documents found yet)");
+            let store = DocumentStore::new(&store_path);
+            let docs = store.list();
+            
+            if docs.is_empty() {
+                println!("No documents found");
+            } else {
+                println!("Documents ({} total):", docs.len());
+                for doc in docs {
+                    println!("  [{}] {}", doc.id, doc.name);
+                }
+            }
         }
         Commands::Delete { id } => {
-            println!("Deleting document: {}", id);
+            let mut store = DocumentStore::new(&store_path);
+            
+            if store.remove(&id).is_some() {
+                if let Err(e) = store.save(&store_path) {
+                    eprintln!("Error saving changes: {}", e);
+                    return Ok(());
+                }
+                println!("Document deleted: {}", id);
+            } else {
+                println!("Document not found: {}", id);
+            }
         }
         Commands::Get { id } => {
-            println!("Getting document: {}", id);
+            let store = DocumentStore::new(&store_path);
+            
+            if let Some(doc) = store.get(&id) {
+                println!("Document: {}", doc.name);
+                println!("ID: {}", doc.id);
+                println!("Source: {}", doc.source);
+                println!("Created: {}", doc.created_at);
+                println!("");
+                println!("Content:");
+                println!("{}", doc.content);
+            } else {
+                println!("Document not found: {}", id);
+            }
         }
-        Commands::Search { query, limit } => {
+        Commands::Search { query, limit: _ } => {
             println!("Searching for: {}", query);
-            println!("Limit: {} results", limit);
-            println!("(Search requires server to be running)");
+            println!("(Full-text search will be implemented with vector embeddings)");
+            
+            let store = DocumentStore::new(&store_path);
+            let docs = store.list();
+            
+            let query_lower = query.to_lowercase();
+            let matches: Vec<_> = docs.iter()
+                .filter(|d| d.content.to_lowercase().contains(&query_lower) || d.name.to_lowercase().contains(&query_lower))
+                .collect();
+            
+            if matches.is_empty() {
+                println!("No matches found");
+            } else {
+                println!("Found {} matches:", matches.len());
+                for doc in matches {
+                    println!("  [{}] {}", doc.id, doc.name);
+                }
+            }
         }
         Commands::Config { config_cmd } => {
             match config_cmd {
