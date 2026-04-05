@@ -15,7 +15,7 @@ mod mcp;
 mod api;
 mod crypto;
 
-use config::Config;
+use api::AppState;
 
 #[derive(Parser)]
 #[command(name = "context-box")]
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             std::fs::create_dir_all(&data_dir)?;
             
-            let config = Config {
+            let cfg = config::Config {
                 server: config::ServerConfig {
                     host: host.clone(),
                     port,
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             };
             
-            let state = api::AppState::new(config);
+            let state = AppState::new(cfg);
             
             let cors_origins = state.config.api.cors_origins.clone();
             let cors = CorsLayer::new()
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Endpoints:");
             println!("  Health:     http://{}/health", addr);
             println!("  Documents:  http://{}/api/documents", addr);
-            println!("  Search:     http://{}/api/search", addr);
+            println!("  Search:     http://{}/api/search?query=...", addr);
             println!("  Chat:       http://{}/api/chat", addr);
             println!("");
             
