@@ -92,6 +92,213 @@ cargo run --release -- cli config mcp
 | POST | `/api/search` | Semantic search |
 | POST | `/api/chat` | RAG chat |
 
+## Setup
+
+### Automated Setup (Linux)
+
+The setup script handles everything interactively: Rust install, build, encryption key generation, systemd service, Cloudflare Tunnel, and firewall. Supports Arch Linux (pacman), Ubuntu/Debian (apt), and Fedora (dnf).
+
+```bash
+git clone https://github.com/adityasai1234/context-box.git
+cd context-box/contextbox
+bash setup.sh
+```
+
+The script will walk you through each step and let you skip optional ones.
+
+### Manual Setup
+
+**1. Install Rust**
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+**2. Build and install binaries**
+
+```bash
+cd contextbox
+cargo build --release
+sudo cp target/release/context-box /usr/local/bin/context-box
+sudo cp target/release/cb /usr/local/bin/cb
+```
+
+**3. Generate encryption key**
+
+```bash
+cb keygen
+```
+
+Key is stored at `~/.config/contextbox/key.txt`. Back it up — lost key means lost documents.
+
+**4. Create config**
+
+```bash
+mkdir -p ~/.config/contextbox
+cat > ~/.config/contextbox/.env <<EOF
+HOST=127.0.0.1
+PORT=8080
+API_KEY=$(openssl rand -base64 32)
+DATA_DIR=$HOME/contextbox-data
+ENABLE_MCP=true
+EOF
+```
+
+**5. Run as a systemd service**
+
+Create `/etc/systemd/system/contextbox.service`:
+
+```ini
+[Unit]
+Description=ContextBox Document AI Server
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+EnvironmentFile=/home/YOUR_USER/.config/contextbox/.env
+ExecStart=/usr/local/bin/context-box serve
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable contextbox
+sudo systemctl start contextbox
+```
+
+Verify:
+
+```bash
+curl http://localhost:8080/health
+# {"status":"ok","service":"ContextBox"}
+```
+
+---
+
+## Cloudflare Tunnel
+
+Expose ContextBox over HTTPS without opening any ports. Requires a Cloudflare account and a domain on Cloudflare DNS.
+
+**1. Install cloudflared**
+
+```bash
+curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+  -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+```
+
+**2. Authenticate and create tunnel**
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create contextbox
+cloudflared tunnel route dns contextbox docs.yourdomain.com
+```
+
+**3. Create tunnel config**
+
+Create `/etc/cloudflared/config.yml`:
+
+```yaml
+tunnel: contextbox
+credentials-file: /root/.cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: docs.yourdomain.com
+    service: http://localhost:8080
+  - service: http_status:404
+```
+
+Replace `<TUNNEL-UUID>` with the UUID shown after `cloudflared tunnel create`. Check with `cloudflared tunnel list`.
+
+**4. Run tunnel as a systemd service**
+
+Create `/etc/systemd/system/cloudflared.service`:
+
+```ini
+[Unit]
+Description=Cloudflare Tunnel
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared --config /etc/cloudflared/config.yml tunnel run
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable cloudflared
+sudo systemctl start cloudflared
+```
+
+**5. Verify**
+
+```bash
+curl -H "X-API-Key: YOUR_API_KEY" https://docs.yourdomain.com/health
+# {"status":"ok","service":"ContextBox"}
+```
+
+**Firewall (lock down the server)**
+
+With Cloudflare Tunnel you only need SSH open:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
+sudo ufw enable
+```
+
+**Add documents remotely**
+
+```bash
+cb remote add \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY \
+  --file mydoc.md
+
+cb remote list \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY
+
+cb remote search \
+  --url https://docs.yourdomain.com \
+  --api-key YOUR_API_KEY \
+  "search query"
+```
+
+**Connect AI clients (MCP)**
+
+Add to your Claude Desktop / Cursor MCP config:
+
+```json
+{
+  "mcpServers": {
+    "contextbox": {
+      "command": "cb",
+      "args": ["config", "mcp"],
+      "env": {
+        "CONTEXTBOX_URL": "https://docs.yourdomain.com",
+        "API_KEY": "YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+---
+
 ## License
 
 MIT License - See [LICENSE](LICENSE)
