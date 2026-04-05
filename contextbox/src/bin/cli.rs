@@ -2,12 +2,13 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use serde_json::json;
 use std::fs;
+use std::collections::HashMap;
 use contextbox::storage::SqliteStorage;
-use contextbox::crypto::{self, get_key_path, ensure_key, load_key};
+use contextbox::crypto::{get_key_path, ensure_key, load_key};
 
 #[derive(Parser)]
-#[command(name = "contextbox")]
-#[command(about = "Self-hosted Document AI Platform")]
+#[command(name = "cb")]
+#[command(about = "ContextBox CLI - Self-hosted Document AI Platform")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -17,6 +18,12 @@ struct Cli {
     
     #[arg(short, long, env = "OPENROUTER_API_KEY")]
     openrouter_key: Option<String>,
+    
+    #[arg(long)]
+    url: Option<String>,
+    
+    #[arg(long)]
+    api_key: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -51,11 +58,31 @@ enum Commands {
     Search {
         query: String,
     },
+    Remote {
+        #[command(subcommand)]
+        subcommand: RemoteCommands,
+    },
     Config {
         #[command(subcommand)]
         config_cmd: ConfigCommands,
     },
     Setup,
+}
+
+#[derive(Subcommand)]
+enum RemoteCommands {
+    Add {
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+        #[arg(short, long)]
+        name: Option<String>,
+        #[arg(short, long)]
+        content: Option<String>,
+    },
+    List,
+    Search {
+        query: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -274,8 +301,107 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("");
             println!("Next steps:");
             println!("1. Set OPENROUTER_API_KEY in your environment");
-            println!("2. Run: contextbox serve");
+            println!("2. Run: context-box serve");
             println!("3. Add documents: cb add --file doc.md");
+        }
+        
+        Commands::Remote { subcommand } => {
+            let server_url = cli.url.unwrap_or_else(|| "http://localhost:8080".to_string());
+            let api_key = cli.api_key.unwrap_or_default();
+            
+            match subcommand {
+                RemoteCommands::Add { file, name, content } => {
+                    let doc_content = if let Some(f) = file {
+                        match fs::read_to_string(&f) {
+                            Ok(text) => text,
+                            Err(e) => {
+                                eprintln!("Error reading file: {}", e);
+                                return Ok(());
+                            }
+                        }
+                    } else if let Some(c) = content {
+                        c
+                    } else {
+                        eprintln!("No input provided. Use --file or --content");
+                        return Ok(());
+                    };
+                    
+                    let doc_name = name.unwrap_or_else(|| {
+                        file.as_ref()
+                            .and_then(|f| f.file_name())
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("Untitled")
+                            .to_string()
+                    });
+                    
+                    let client = reqwest::Client::new();
+                    let mut form = HashMap::new();
+                    form.insert("content", doc_content);
+                    form.insert("name", doc_name);
+                    
+                    let mut request = client.post(&format!("{}/api/documents", server_url));
+                    if !api_key.is_empty() {
+                        request = request.header("X-API-Key", &api_key);
+                    }
+                    
+                    match request.form(&form).send() {
+                        Ok(resp) => {
+                            if resp.status().is_success() {
+                                println!("Document added to remote: {}", server_url);
+                            } else {
+                                eprintln!("Error: {}", resp.status());
+                            }
+                        }
+                        Err(e) => eprintln!("Connection error: {}", e),
+                    }
+                }
+                
+                RemoteCommands::List => {
+                    let client = reqwest::Client::new();
+                    let mut request = client.get(&format!("{}/api/documents", server_url));
+                    if !api_key.is_empty() {
+                        request = request.header("X-API-Key", &api_key);
+                    }
+                    
+                    match request.send() {
+                        Ok(resp) => {
+                            if let Ok(docs) = resp.json::<Vec<serde_json::Value>>() {
+                                println!("Documents on {}:", server_url);
+                                for doc in docs {
+                                    println!("  [{}] {}", 
+                                        doc.get("id").unwrap_or(&serde_json::Value::Null),
+                                        doc.get("name").unwrap_or(&serde_json::Value::Null)
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("Connection error: {}", e),
+                    }
+                }
+                
+                RemoteCommands::Search { query } => {
+                    let client = reqwest::Client::new();
+                    let url = format!("{}/api/search?query={}", server_url, query);
+                    let mut request = client.get(&url);
+                    if !api_key.is_empty() {
+                        request = request.header("X-API-Key", &api_key);
+                    }
+                    
+                    match request.send() {
+                        Ok(resp) => {
+                            if let Ok(data) = resp.json::<serde_json::Value>() {
+                                println!("Search results from {}:", server_url);
+                                if let Some(results) = data.get("results").and_then(|r| r.as_array()) {
+                                    for result in results {
+                                        println!("  - {}", result.get("name").unwrap_or(&serde_json::Value::Null));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("Connection error: {}", e),
+                    }
+                }
+            }
         }
     }
     
