@@ -6,6 +6,11 @@ license = "MIT"
 authors = ["ContextBox Team"]
 description = "Self-hosted Document AI Platform - Like Context7 but self-hosted"
 
+[features]
+default = []
+pdf = []
+docx = []
+
 [dependencies]
 axum = { version = "0.7", features = ["multipart"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
@@ -23,7 +28,6 @@ base64 = "0.22"
 dirs = "5"
 
 # Encryption
-age-core = "0.9"
 chacha20poly1305 = "0.10"
 rand = "0.8"
 
