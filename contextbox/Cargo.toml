@@ -30,6 +30,14 @@ async-trait = "0.1"
 base64 = "0.22"
 dirs = "5"
 
+# Encryption
+age = "0.9"
+age-core = "0.9"
+rand = "0.8"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
 [dependencies.kreuzberg]
 version = "0.1"
 features = ["sync"]

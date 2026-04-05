@@ -1,8 +1,9 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use serde_json::json;
 use std::fs;
-use contextbox::storage::{DocumentStore, StoredDocument, create_document};
+use contextbox::storage::SqliteStorage;
+use contextbox::crypto::{self, get_key_path, ensure_key, load_key};
 
 #[derive(Parser)]
 #[command(name = "contextbox")]
@@ -18,7 +19,7 @@ struct Cli {
     openrouter_key: Option<String>,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 enum Commands {
     Serve {
         #[arg(short, long, default_value = "8080")]
@@ -26,6 +27,11 @@ enum Commands {
         
         #[arg(short, long, default_value = "127.0.0.1")]
         host: String,
+    },
+    Keygen,
+    Key {
+        #[command(subcommand)]
+        subcommand: KeyCommands,
     },
     Add {
         #[arg(short, long)]
@@ -44,22 +50,21 @@ enum Commands {
     },
     Search {
         query: String,
-        #[arg(short, long, default_value = "5")]
-        limit: usize,
     },
     Config {
         #[command(subcommand)]
         config_cmd: ConfigCommands,
     },
-    Setup {
-        #[arg(short, long)]
-        mcp: bool,
-        #[arg(short, long)]
-        cli: bool,
-    },
+    Setup,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
+enum KeyCommands {
+    Show,
+    Path,
+}
+
+#[derive(Subcommand)]
 enum ConfigCommands {
     Mcp,
     Cli,
@@ -73,12 +78,17 @@ fn get_data_dir() -> PathBuf {
 
 fn ensure_data_dir(data_dir: &PathBuf) -> std::io::Result<()> {
     fs::create_dir_all(data_dir)?;
-    fs::create_dir_all(data_dir.join("documents"))?;
     Ok(())
 }
 
-fn get_store_path(data_dir: &PathBuf) -> PathBuf {
-    data_dir.join("documents.json")
+fn get_db_path(data_dir: &PathBuf) -> PathBuf {
+    data_dir.join("documents.db")
+}
+
+fn open_storage(data_dir: &PathBuf) -> Result<SqliteStorage, String> {
+    let key = load_key().map_err(|e| e.to_string())?;
+    let db_path = get_db_path(data_dir);
+    SqliteStorage::new(&db_path, &key).map_err(|e| e.to_string())
 }
 
 #[tokio::main]
@@ -92,7 +102,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     ensure_data_dir(&data_dir)?;
-    let store_path = get_store_path(&data_dir);
     
     match cli.command {
         Commands::Serve { port, host } => {
@@ -100,6 +109,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("This will run the web API server");
             println!("Access via: http://{}:{}", host, port);
         }
+        
+        Commands::Keygen => {
+            let (key, is_new) = ensure_key().map_err(|e| e.to_string())?;
+            
+            if is_new {
+                println!("New encryption key generated");
+            } else {
+                println!("Encryption key already exists");
+            }
+            
+            let key_path = get_key_path();
+            println!("Key saved to: {:?}", key_path);
+            println!("");
+            println!("WARNING: Keep this key safe!");
+            println!("- Anyone with this key can read your documents");
+            println!("- If you lose the key, your documents cannot be recovered");
+            println!("- Set permissions: chmod 600 {}", key_path.display());
+        }
+        
+        Commands::Key { subcommand } => {
+            match subcommand {
+                KeyCommands::Show => {
+                    let key_path = get_key_path();
+                    if key_path.exists() {
+                        let content = fs::read_to_string(&key_path)?;
+                        println!("{}", content.trim());
+                    } else {
+                        println!("No key found. Run 'cb keygen' first.");
+                    }
+                }
+                KeyCommands::Path => {
+                    println!("{}", get_key_path().display());
+                }
+            }
+        }
+        
         Commands::Add { file, name, content } => {
             let doc_content = if let Some(f) = file {
                 match fs::read_to_string(&f) {
@@ -124,23 +169,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .to_string()
             });
             
-            let mut store = DocumentStore::new(&store_path);
-            let doc = create_document(doc_name.clone(), doc_content.clone(), "cli");
-            let id = store.add(doc);
+            let storage = open_storage(&data_dir)?;
+            let id = storage.add(doc_name.clone(), doc_content.clone(), "cli")
+                .map_err(|e| e.to_string())?;
             
-            if let Err(e) = store.save(&store_path) {
-                eprintln!("Error saving document: {}", e);
-                return Ok(());
-            }
-            
-            println!("Document '{}' added", doc_name);
+            println!("Document '{}' added (encrypted)", doc_name);
             println!("  ID: {}", id);
             println!("  Content length: {} chars", doc_content.len());
-            println!("  Saved to: {:?}", store_path);
         }
+        
         Commands::List => {
-            let store = DocumentStore::new(&store_path);
-            let docs = store.list();
+            let storage = open_storage(&data_dir)?;
+            let docs = storage.list().map_err(|e| e.to_string())?;
             
             if docs.is_empty() {
                 println!("No documents found");
@@ -151,55 +191,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        
         Commands::Delete { id } => {
-            let mut store = DocumentStore::new(&store_path);
+            let storage = open_storage(&data_dir)?;
             
-            if store.remove(&id).is_some() {
-                if let Err(e) = store.save(&store_path) {
-                    eprintln!("Error saving changes: {}", e);
-                    return Ok(());
-                }
+            if storage.delete(&id).map_err(|e| e.to_string())? {
                 println!("Document deleted: {}", id);
             } else {
                 println!("Document not found: {}", id);
             }
         }
+        
         Commands::Get { id } => {
-            let store = DocumentStore::new(&store_path);
+            let storage = open_storage(&data_dir)?;
             
-            if let Some(doc) = store.get(&id) {
-                println!("Document: {}", doc.name);
-                println!("ID: {}", doc.id);
-                println!("Source: {}", doc.source);
-                println!("Created: {}", doc.created_at);
-                println!("");
-                println!("Content:");
-                println!("{}", doc.content);
-            } else {
-                println!("Document not found: {}", id);
-            }
-        }
-        Commands::Search { query, limit: _ } => {
-            println!("Searching for: {}", query);
-            println!("(Full-text search will be implemented with vector embeddings)");
-            
-            let store = DocumentStore::new(&store_path);
-            let docs = store.list();
-            
-            let query_lower = query.to_lowercase();
-            let matches: Vec<_> = docs.iter()
-                .filter(|d| d.content.to_lowercase().contains(&query_lower) || d.name.to_lowercase().contains(&query_lower))
-                .collect();
-            
-            if matches.is_empty() {
-                println!("No matches found");
-            } else {
-                println!("Found {} matches:", matches.len());
-                for doc in matches {
-                    println!("  [{}] {}", doc.id, doc.name);
+            match storage.get(&id).map_err(|e| e.to_string()) {
+                Ok(doc) => {
+                    println!("Document: {}", doc.name);
+                    println!("ID: {}", doc.id);
+                    println!("Source: {}", doc.source);
+                    println!("Created: {}", doc.created_at);
+                    println!("");
+                    println!("Content (decrypted):");
+                    println!("{}", doc.content);
+                }
+                Err(_) => {
+                    println!("Document not found: {}", id);
                 }
             }
         }
+        
+        Commands::Search { query } => {
+            let storage = open_storage(&data_dir)?;
+            let results = storage.search(&query).map_err(|e| e.to_string())?;
+            
+            if results.is_empty() {
+                println!("No matches found");
+            } else {
+                println!("Found {} matches:", results.len());
+                for doc in results {
+                    println!("");
+                    println!("=== [{}] {} ===", doc.id, doc.name);
+                    println!("{}", doc.content);
+                }
+            }
+        }
+        
         Commands::Config { config_cmd } => {
             match config_cmd {
                 ConfigCommands::Mcp => {
@@ -214,26 +251,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", serde_json::to_string_pretty(&mcp_config)?);
                 }
                 ConfigCommands::Cli => {
+                    let key_path = get_key_path();
                     println!("ContextBox CLI Configuration:");
                     println!("  Data directory: {:?}", data_dir);
+                    println!("  Key path: {:?}", key_path);
+                    println!("  Key exists: {}", key_path.exists());
                     println!("  OpenRouter key: {}", if cli.openrouter_key.is_some() { "Set" } else { "Not set" });
                 }
             }
         }
-        Commands::Setup { mcp, cli } => {
+        
+        Commands::Setup => {
             println!("Running ContextBox setup...");
-            println!("Data directory created: {:?}", data_dir);
+            println!("");
             
-            if mcp {
-                println!("MCP configuration ready");
-            }
-            if cli {
-                println!("CLI configured");
-            }
+            let (key, is_new) = ensure_key().map_err(|e| e.to_string())?;
+            println!("Encryption key: {}", if is_new { "generated" } else { "exists" });
             
-            println!("\nNext steps:");
+            let db_path = get_db_path(&data_dir);
+            println!("Database: {:?}", db_path);
+            
+            println!("");
+            println!("Next steps:");
             println!("1. Set OPENROUTER_API_KEY in your environment");
             println!("2. Run: contextbox serve");
+            println!("3. Add documents: cb add --file doc.md");
         }
     }
     
