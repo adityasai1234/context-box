@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             let doc_name = name.unwrap_or_else(|| "Untitled".to_string());
             
-            println!("✓ Document '{}' added", doc_name);
+            println!("Document '{}' added", doc_name);
             println!("  Content length: {} chars", doc_content.len());
             println!("  Data directory: {:?}", data_dir);
         }
@@ -155,13 +155,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Setup { mcp, cli } => {
             println!("Running ContextBox setup...");
-            println!("✓ Data directory created: {:?}", data_dir);
+            println!("Data directory created: {:?}", data_dir);
             
             if mcp {
-                println!("✓ MCP configuration ready");
+                println!("MCP configuration ready");
             }
             if cli {
-                println!("✓ CLI configured");
+                println!("CLI configured");
             }
             
             println!("\nNext steps:");

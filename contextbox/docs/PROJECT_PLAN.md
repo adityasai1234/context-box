@@ -118,11 +118,11 @@ contextbox/
 ### Optional Features (Toggleable)
 | Feature | Description | Default |
 |---------|-------------|---------|
-| MCP Server | AI access via MCP protocol | ✅ |
-| CLI Tools | Command-line interface | ✅ |
-| Web UI | Browser drag-drop interface | ⬜ |
-| RAG Chat | Chat with your documents | ⬜ |
-| URL Crawl | Fetch docs from URLs | ⬜ |
+| MCP Server | AI access via MCP protocol | Enabled |
+| CLI Tools | Command-line interface | Enabled |
+| Web UI | Browser drag-drop interface | Optional |
+| RAG Chat | Chat with your documents | Optional |
+| URL Crawl | Fetch docs from URLs | Optional |
 
 ## API Endpoints
 

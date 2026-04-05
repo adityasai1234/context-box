@@ -12,12 +12,12 @@ ContextBox allows you to:
 
 ## Features
 
-- ✅ REST API server (Axum)
-- ✅ MCP Server for AI clients
-- ✅ CLI tools
-- ⬜ Web UI (drag-drop) - Coming soon
-- ⬜ RAG Chat - Coming soon
-- ⬜ URL Crawling - Coming soon
+- REST API server (Axum)
+- MCP Server for AI clients
+- CLI tools
+- Web UI (drag-drop) - Coming soon
+- RAG Chat - Coming soon
+- URL Crawling - Coming soon
 
 ## Quick Start
 
