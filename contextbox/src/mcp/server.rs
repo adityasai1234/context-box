@@ -1,6 +1,17 @@
-use modelcontextprotocol_server::server::Server;
-use modelcontextprotocol_server::types::{Tool, ToolInputSchema};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: ToolInputSchema,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ToolInputSchema {
+    Object { schema: serde_json::Value },
+}
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -163,9 +174,8 @@ impl McpServer {
                     crate::error::AppError::InvalidInput("content is required".to_string()))?;
                 
                 let name = input.metadata
-                    .and_then(|m| m.get("name").and_then(|n| n.as_str()))
-                    .unwrap_or("Untitled")
-                    .to_string();
+                    .and_then(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                    .unwrap_or_else(|| "Untitled".to_string());
                 
                 let doc = Document::new(name, content);
                 let mut docs = self.documents.lock().await;

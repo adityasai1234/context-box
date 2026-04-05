@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::fs;
+use base64::Engine;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

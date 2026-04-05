@@ -21,6 +21,7 @@ pub struct SearchResult {
     pub score: f32,
 }
 
+#[derive(Debug)]
 pub struct VectorStore {
     embeddings: Vec<Embedding>,
     document_index: HashMap<String, String>,

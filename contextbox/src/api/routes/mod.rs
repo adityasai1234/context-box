@@ -9,9 +9,10 @@ use tokio::sync::Mutex;
 
 use crate::config::Config;
 use crate::error::{AppError, AppResult};
-use crate::storage::{SqliteStorage, Document as StoredDocument, DocumentMeta};
+use crate::storage::{SqliteStorage, SqliteDocument as StoredDocument, DocumentMeta};
 use crate::crypto::load_key;
 
+#[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub storage: Arc<Mutex<SqliteStorage>>,
@@ -69,10 +70,7 @@ async fn get_config(State(state): State<AppState>) -> Json<serde_json::Value> {
 
 async fn list_documents(State(state): State<AppState>) -> Json<Vec<DocumentMeta>> {
     let storage = state.storage.lock().await;
-    match storage.list() {
-        Ok(docs) => Json(docs),
-        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
-    }
+    Json(storage.list().unwrap_or_default())
 }
 
 async fn upload_document(
