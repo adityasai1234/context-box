@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State, Multipart, Query},
-    routing::{get, post, delete},
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::config::Config;
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::storage::{SqliteStorage, SqliteDocument as StoredDocument, DocumentMeta};
 use crate::crypto::load_key;
 
@@ -170,7 +170,7 @@ async fn semantic_search(
 }
 
 async fn rag_chat(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
     let message = payload.get("message")

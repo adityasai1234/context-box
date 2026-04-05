@@ -123,7 +123,7 @@ impl McpServer {
                     .map_err(|e| crate::error::AppError::InvalidInput(e.to_string()))?;
                 
                 let query = input.query.unwrap_or_default();
-                let limit = input.limit.unwrap_or(5);
+                let _limit = input.limit.unwrap_or(5);
                 
                 Ok(serde_json::json!({
                     "query": query,

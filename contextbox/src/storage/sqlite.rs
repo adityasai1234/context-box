@@ -52,7 +52,7 @@ impl SqliteStorage {
         }
         
         let conn = Connection::open(db_path)?;
-        let mut storage = Self { conn, key: *key };
+        let storage = Self { conn, key: *key };
         storage.init_tables()?;
         Ok(storage)
     }

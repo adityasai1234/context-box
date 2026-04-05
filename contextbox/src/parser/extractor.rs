@@ -36,7 +36,7 @@ impl DocumentParser {
         }
     }
 
-    fn parse_pdf(&self, path: &Path) -> AppResult<String> {
+    fn parse_pdf(&self, _path: &Path) -> AppResult<String> {
         #[cfg(feature = "pdf")]
         {
             use std::fs::File;
@@ -65,7 +65,7 @@ impl DocumentParser {
         }
     }
 
-    fn parse_docx(&self, path: &Path) -> AppResult<String> {
+    fn parse_docx(&self, _path: &Path) -> AppResult<String> {
         #[cfg(feature = "docx")]
         {
             use std::fs::File;
