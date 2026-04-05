@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ContextBox - Document AI Platform</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ContextBox</h1>
+            <p>Self-hosted Document AI Platform</p>
+        </header>
+
+        <main>
+            <section id="upload-section">
+                <h2>Upload Documents</h2>
+                <div id="drop-zone" class="drop-zone">
+                    <p>Drag and drop files here or click to browse</p>
+                    <input type="file" id="file-input" multiple accept=".txt,.md,.pdf,.docx,.json,.xml,.yaml,.toml,.rs,.js,.py,.go,.java,.c,.cpp,.html,.css">
+                </div>
+                <div id="upload-list"></div>
+            </section>
+
+            <section id="documents-section">
+                <h2>Documents</h2>
+                <div id="documents-list"></div>
+            </section>
+
+            <section id="search-section">
+                <h2>Search</h2>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Enter search query...">
+                    <button id="search-btn">Search</button>
+                </div>
+                <div id="search-results"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>ContextBox - MIT License</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
