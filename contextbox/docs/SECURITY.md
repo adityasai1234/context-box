@@ -2,22 +2,20 @@
 
 ## Security Overview
 
-This guide covers security best practices for running ContextBox.
+This guide covers security best practices for running ContextBox with Cloudflare Tunnel.
 
 ## Security Layers
 
 | Layer | Protection |
 |-------|------------|
-| Network | Firewall blocks unauthorized ports |
-| Transport | HTTPS/TLS encrypts traffic |
+| Network | No exposed ports (Tunnel handles everything) |
+| Transport | HTTPS/TLS via Cloudflare |
 | Application | API key authentication |
 | Storage | Documents encrypted at rest |
 
 ## Firewall Setup
 
-### Why Firewall?
-
-Block external access to ports you don't need exposed.
+With Cloudflare Tunnel, you don't need to open any ports except SSH!
 
 ### UFW Commands (Ubuntu/Debian)
 
@@ -32,21 +30,14 @@ sudo ufw default allow outgoing
 # Allow SSH (important!)
 sudo ufw allow 22/tcp
 
-# Allow HTTPS (Caddy)
-sudo ufw allow 443/tcp
-
-# Allow HTTP (Caddy for cert challenges)
-sudo ufw allow 80/tcp
-
-# Explicitly block ContextBox port
-sudo ufw deny 8080/tcp
-
 # Enable firewall
 sudo ufw enable
 
 # Check status
 sudo ufw status verbose
 ```
+
+That's it! No other ports needed with Cloudflare Tunnel.
 
 ### Verify Setup
 
@@ -61,9 +52,6 @@ Status: active
 To                         Action      From
 --                         ------      ----
 22/tcp                     ALLOW       Anywhere
-443/tcp                    ALLOW       Anywhere
-80/tcp                     ALLOW       Anywhere
-8080/tcp                  DENY        Anywhere
 ```
 
 ## Generate Strong API Key
@@ -143,41 +131,44 @@ cp ~/.config/contextbox/key.txt ~/backup-contextbox-key.txt
 
 Before going live with remote access:
 
-- [ ] Firewall configured (only 22, 80, 443 open)
-- [ ] Port 8080 blocked from external access
+- [ ] Firewall configured (only SSH open)
+- [ ] Cloudflare Tunnel running
 - [ ] Strong API key generated (32+ random characters)
 - [ ] API key stored in environment variable, not in scripts
 - [ ] Encryption key backed up securely
-- [ ] Caddy HTTPS working
 - [ ] Test remote access works
 - [ ] Check logs for any errors
 
 ## Monitoring
 
-### Check Server Logs
+### Check ContextBox Logs
 
 ```bash
-# If running in background with logs
-tail -f /var/log/contextbox.log
+# If running in background
+tail -f contextbox.log
 
 # Or check systemd journal
 journalctl -u contextbox -f
 ```
 
-### Check Caddy Logs
+### Check Cloudflare Tunnel Logs
 
 ```bash
-sudo journalctl -u caddy -f
+# Check tunnel status
+cloudflared tunnel list
+
+# Check logs
+journalctl -u cloudflared -f
 ```
 
 ## Emergency Procedures
 
 ### If Compromised
 
-1. Stop the server immediately
-2. Generate new API key
-3. Generate new encryption key (note: old documents won't be recoverable)
-4. Update firewall rules
+1. Stop the tunnel immediately
+2. Stop ContextBox
+3. Generate new API key
+4. Generate new encryption key (note: old documents won't be recoverable)
 5. Investigate the breach
 
 ### If You Lose Your Encryption Key
@@ -192,11 +183,12 @@ Unfortunately, there is no recovery:
 | Practice | Recommendation |
 |----------|----------------|
 | API Key | Use 32+ random characters |
-| Firewall | Block all unnecessary ports |
+| Firewall | Block all incoming except SSH |
 | Updates | Keep system and Rust updated |
 | Backups | Backup encryption key securely |
 | Logs | Monitor for suspicious activity |
 | SSH | Use key-based authentication, disable password login |
+| Cloudflare | Use strong Cloudflare account password + 2FA |
 
 ## Network Diagram
 
@@ -205,35 +197,58 @@ Unfortunately, there is no recovery:
                         |
                         ▼
               ┌───────────────────┐
-              │   Firewall        │
-              │   - Allow 22     │  (SSH)
-              │   - Allow 80,443 │  (HTTPS)
-              │   - Block 8080   │
+              │   Cloudflare     │
+              │   (HTTPS/TLS)   │
               └────────┬──────────┘
                        │
               ┌──────┴──────┐
+              │             │
+       Cloudflare      Cloudflare
+       Proxy           DNS
+              │             │
               ▼             ▼
         ┌─────────┐   ┌─────────┐
-        │  Caddy  │   │  SSH    │
-        │  :443    │   │  :22    │
-        └────┬────┘   └────┬────┘
-             │             │
-             ▼             │
-      ┌───────────┐      │
-      │ContextBox │      │
-      │ :8080    │◄─────┘
-      │(local    │
-      │ only)    │
+        │ Tunnel  │   │ Your    │
+        │ Daemon  │   │ Domain  │
+        └────┬────┘   └─────────┘
+             │
+             ▼
+      ┌───────────┐
+      │ContextBox │
+      │ :8080   │
+      │(local   │
+      │ only)   │
       └───────────┘
+
+Firewall:
+- SSH (22): ALLOW
+- Everything else: DENY
 ```
 
 ## Summary
 
-| Security Measure | Status |
-|-----------------|--------|
-| Firewall | Block ports 8080, allow 443 |
-| HTTPS | Via Caddy |
+| Security Measure | Protection |
+|-----------------|------------|
+| Firewall | Block all, allow SSH only |
+| Cloudflare Tunnel | No exposed ports |
+| HTTPS | Via Cloudflare |
 | API Key | Required for all operations |
 | Encryption | AES-256-GCM at rest |
 | SSH Key | Use key-based auth |
 | Key Backup | Store securely |
+
+## Quick Commands
+
+```bash
+# Start ContextBox (local only)
+./context-box serve --host 127.0.0.1 --port 8080 --api-key YOUR_KEY
+
+# Run Cloudflare Tunnel
+cloudflared tunnel run contextbox
+
+# Test access
+curl -H "X-API-Key: YOUR_KEY" https://yourdomain.com/health
+
+# Check tunnel status
+cloudflared tunnel list
+```
