@@ -5,6 +5,7 @@ use std::fs;
 use std::collections::HashMap;
 use contextbox::storage::SqliteStorage;
 use contextbox::crypto::{get_key_path, ensure_key, load_key};
+use contextbox::cli::banner;
 
 #[derive(Parser)]
 #[command(name = "cb")]
@@ -131,13 +132,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ensure_data_dir(&data_dir)?;
     
     match cli.command {
-        Commands::Serve { port, host } => {
-            println!("Starting ContextBox server on {}:{}...", host, port);
-            println!("This will run the web API server");
-            println!("Access via: http://{}:{}", host, port);
-        }
-        
         Commands::Keygen => {
+            banner::print_banner();
+            println!("");
+            println!("Generating encryption key...");
+            println!("");
+            
             let (key, is_new) = ensure_key().map_err(|e| e.to_string())?;
             
             if is_new {
@@ -289,6 +289,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         
         Commands::Setup => {
+            banner::print_banner();
+            println!("");
             println!("Running ContextBox setup...");
             println!("");
             
