@@ -1,6 +1,7 @@
-use chacha20poly1305::{AeadCore, ChaCha20Poly1305, KeyInit, Nonce};
+use chacha20poly1305::{AeadCore, Aead, ChaCha20Poly1305, KeyInit, Nonce};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use thiserror::Error;
+use rand::RngCore;
 
 #[derive(Error, Debug)]
 pub enum CryptoError {
@@ -19,7 +20,8 @@ pub type Result<T> = std::result::Result<T, CryptoError>;
 pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| CryptoError::EncryptError(e.to_string()))?;
-    let nonce = cipher.generate_nonce();
+    let mut rng = rand::rngs::OsRng;
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut rng);
     let ciphertext = cipher.encrypt(&nonce, plaintext)
         .map_err(|e| CryptoError::EncryptError(e.to_string()))?;
     let mut result = nonce.to_vec();
